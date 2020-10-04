@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 #include "a1_lib.h"
 #include "backend.h"
@@ -14,23 +15,33 @@
 #define BUFSIZE   1024
 #define MAX_CLIENT  5
 
-int main(void) {
+int main(int argc, char* argv[]) {
   int sockfd, clientfd;
   char msg[BUFSIZE];
   const char *greeting = "hello, world\n";
   char result[BUFSIZE];
   int running = 1;
+  int pid;
+  int rval;
 
-  if (create_server("0.0.0.0", 10000, &sockfd) < 0) {
+  //if (create_server("0.0.0.0", 10000, &sockfd) < 0) {
+  if (create_server(argv[1], atoi(argv[2]), &sockfd) < 0) {
     fprintf(stderr, "oh no\n");
     return -1;
+  } else {
+    printf("Server listening on %s:%s\n\n", argv[1], argv[2]);
+    //printf("clientfd %d", clientfd);
   }
+
+  // set socket to non-blocking
+  /*if (fcntl(sockfd, F_SETFL, O_NONBLOCK) < 0) {
+    return -1;
+  }*/
 
   if (accept_connection(sockfd, &clientfd) < 0) {
     fprintf(stderr, "oh no\n");
     return -1;
   }
-
 
   while (strcmp(msg, "quit\n")) {
     memset(msg, 0, sizeof(msg));
@@ -78,7 +89,7 @@ int main(void) {
     if (byte_count <= 0) {
       break;
     }
-    printf("Client command: %s\n", msg);
+    printf("Client command: %s\n\n", msg);
     send_message(clientfd, result, strlen(result));
     //printf("Client: %s\n", msg);
     //send_message(clientfd, greeting, strlen(greeting));
