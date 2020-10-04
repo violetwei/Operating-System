@@ -1,0 +1,225 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+
+#include "a1_lib.h"
+#include "backend.h"
+#include "rpc.h"
+
+#define BUFSIZE   1024
+#define MAX_CLIENT  5
+
+int main(void) {
+  int sockfd, clientfd;
+  char msg[BUFSIZE];
+  const char *greeting = "hello, world\n";
+  char result[BUFSIZE];
+  int running = 1;
+
+  if (create_server("0.0.0.0", 10000, &sockfd) < 0) {
+    fprintf(stderr, "oh no\n");
+    return -1;
+  }
+
+  if (accept_connection(sockfd, &clientfd) < 0) {
+    fprintf(stderr, "oh no\n");
+    return -1;
+  }
+
+
+  while (strcmp(msg, "quit\n")) {
+    memset(msg, 0, sizeof(msg));
+    ssize_t byte_count = recv_message(clientfd, msg, BUFSIZE);
+
+    // restore input message to a struct
+    struct message_t *input_message = (struct message_t*) msg;
+    char *cmd = input_message->command;
+
+    if (strcmp(cmd, "add") == 0) {
+      int additionAns = addInts(input_message->integer1, input_message->integer2);
+      //itoa(additionAns, result, 10);
+      snprintf(result, sizeof(result), "%d\n", additionAns);
+    } else if (strcmp(cmd, "multiply") == 0) {
+      int multiplyAns = multiplyInts(input_message->integer1, input_message->integer2);
+      // itoa(multiplyAns, result, 10);
+      snprintf(result, sizeof(result), "%d\n", multiplyAns);
+    } else if (strcmp(cmd, "divide") == 0) {
+      float divisionAns = divideFloats(input_message->float1, input_message->float2);
+      if (input_message->float2 == 0) {
+        strcpy(result, "Error: Division by zero\n");
+      } else {
+        //ftoa(divisionAns, result, 6);
+        snprintf(result, sizeof(result), "%.6f\n", divisionAns);
+      }
+    } else if (strcmp(cmd, "factorial") == 0) {
+      int factAns = factorial(input_message->factNum);
+      // printf("Factorial number is %d", input_message->factNum);
+      //itoa(factAns, result, 10);
+      snprintf(result, sizeof(result), "%d\n", factAns);
+    } else if (strcmp(cmd, "quit\n") == 0) {
+        strcpy(result, "Bye!\n");
+    } else if (strcmp(cmd, "sleep") == 0) {
+      sleepXSeconds(input_message->seconds);
+      strcpy(result, "\n");
+    } else if (strcmp(cmd, "exit\n") == 0) { // terminates the frontend only
+      //close(clientfd);
+      //shutdown(clientfd, SHUT_RDWR);
+      strcpy(result, "Goodbye Frontend!\n");
+    } else {
+        snprintf(result, sizeof(result), "Error: Command \"%s\" not found\n", cmd);
+    }
+
+
+    if (byte_count <= 0) {
+      break;
+    }
+    printf("Client command: %s\n", msg);
+    send_message(clientfd, result, strlen(result));
+    //printf("Client: %s\n", msg);
+    //send_message(clientfd, greeting, strlen(greeting));
+  }
+
+  return 0;
+}
+
+
+/*
+int main(int argc, char* argv[]) {
+  int sockfd, clientfd;
+  char msg[BUFSIZE];
+  const char *greeting = "hello, world\n";
+  char result[BUFSIZE];
+  int running = 1;
+  int pid;
+  int rval;
+
+  if (argc != 3) {
+    printf("Please enter the required arguments correctly!\n");
+    return -1;
+  }
+
+  char *host_ip = argv[1];
+  int host_port = atoi(argv[2]);
+
+  // connect_to_server(const char *host, uint16_t port, int *sockfd)
+  // connect_to_server("0.0.0.0", 10000, &sockfd)
+  // ./backend <host_ip> <host_port>
+  //if (connect_to_server("0.0.0.0", 10000, &sockfd)) {
+  if (connect_to_server(host_ip, host_port, &sockfd) < 0) {
+    fprintf(stderr, "oh no server\n");
+    return -1;
+  } else {
+    printf("Server listening on %s:%d\n", host_ip, host_port);
+    //printf("clientfd %d", clientfd);
+  }
+
+  if (accept_connection(sockfd, &clientfd) < 0) {
+    fprintf(stderr, "oh no\n");
+    return -1;
+  } else {
+    printf("Client connection accepted!\n");
+  }
+
+  while (strcmp(msg, "quit\n")) {
+    memset(msg, 0, sizeof(msg));
+    ssize_t byte_count = recv_message(clientfd, msg, BUFSIZE);
+
+    // restore input message to a struct
+    struct message_t *input_message = (struct message_t*) msg;
+    char *cmd = input_message->command;
+
+    if (strcmp(cmd, "add") == 0) {
+      int additionAns = addInts(input_message->integer1, input_message->integer2);
+      //itoa(additionAns, result, 10);
+      snprintf(result, sizeof(result), "%d", additionAns);
+    } else if (strcmp(cmd, "multiply") == 0) {
+      int multiplyAns = multiplyInts(input_message->integer1, input_message->integer2);
+      // itoa(multiplyAns, result, 10);
+      snprintf(result, sizeof(result), "%d", multiplyAns);
+    } else if (strcmp(cmd, "divide") == 0) {
+      float divisionAns = divideFloats(input_message->float1, input_message->float2);
+      if (input_message->float2 == 0) {
+        strcpy(result, "Error: Division by zero");
+      } else {
+        //ftoa(divisionAns, result, 6);
+        snprintf(result, sizeof(result), "%.6f", divisionAns);
+      }
+    } else if (strcmp(cmd, "factorial") == 0) {
+      int factAns = factorial(input_message->factNum);
+      //itoa(factAns, result, 10);
+      snprintf(result, sizeof(result), "%d", factAns);
+    } else {
+      strcpy(result, "Error: Command not found");
+    }
+
+    if (byte_count <= 0) {
+      break;
+    }
+    printf("Client: %s\n", msg);
+    send_message(clientfd, result, strlen(result));
+  }
+
+  /* return a value from a child to parent */ 
+  /*if ((pid = fork()) == 0) {
+    sleep(10);
+    return 10;
+  }
+
+  while (1) {
+    sleep(1);
+    int res = waitpid(pid, &rval, WNOHANG);
+    printf("Returned valud %d\n", WEXITSTATUS(rval));
+  
+
+  return 0;
+}*/
+
+// add two integers
+int addInts(int a, int b) {
+    int ans = a + b;
+    printf("Addition result: %d\n", ans);
+    return ans;
+}
+
+// multiply two integers
+int multiplyInts(int a, int b) {
+    int ans = a * b;
+    printf("Multiplication result: %d\n", ans);
+    return ans;
+}
+
+// divide float numbers & report divide by zero error
+// output: a floating point number with exactly 6 digits after the decimal point or Error: Division by zero
+float divideFloats(float a, float b) {
+    if (b == 0) {
+        printf("Error: Division by zero\n");
+        return 0;
+    } else {
+        float ans = a / b;
+        printf("Division result: %.6f\n", ans);
+        return ans;//roundf(ans * 1000000) / 1000000;
+    }
+}
+
+// make the calculator sleep for x seconds - this is blocking
+int sleepXSeconds(int x) {
+    printf("Sleep %d seconds\n", x);
+    sleep(x);
+    return x;
+}
+
+// x is guaranteed to be in the range [0, 20]
+// return factorial of x
+uint64_t factorial(int x) {
+  int fact = 1;
+    for (int i = 1; i <= x; i++) {
+        fact *= i;
+    }
+    printf("Factorial result of %d: %d\n", x, fact);
+    return fact;
+}
