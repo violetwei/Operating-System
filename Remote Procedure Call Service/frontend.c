@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  while (strcmp(user_input, "quit\n")) {
+  while (strcmp(user_input, "exit\n")) {
     memset(user_input, 0, sizeof(user_input));
     memset(server_msg, 0, sizeof(server_msg));
 
@@ -50,56 +50,7 @@ int main(int argc, char* argv[]) {
   return 0;
 }
 
-/*int main(int argc, char* argv[]) {
-  int sockfd;
-  char user_input[BUFSIZE] = { 0 };
-  char server_msg[BUFSIZE] = { 0 };
-
-  if (argc != 3) {
-    printf("Please enter the required arguments correctly!");
-    return -1;
-  }
-
-  char *host_ip = argv[1];
-  int host_port = atoi(argv[2]);
-
-  // connect_to_server(const char *host, uint16_t port, int *sockfd)
-  // connect_to_server("0.0.0.0", 10000, &sockfd)
-  // ./frontend <host_ip> <host_port>
-  if (connect_to_server(host_ip, host_port, &sockfd) < 0) {
-    fprintf(stderr, "oh no\n");
-    return -1;
-  }
-
-  if (strcmp(user_input, "quit\n") == 0) {
-    printf("Bye!");
-  }
-
-  while (strcmp(user_input, "quit\n")) {
-    memset(user_input, 0, sizeof(user_input));
-    memset(server_msg, 0, sizeof(server_msg));
-
-    // read user input from command line
-    fgets(user_input, BUFSIZE, stdin);
-
-    // convert the input to a struct message
-    struct message_t message_input = parseToStruct(user_input); // (char*)&user_input
-
-    // send the input to server
-    send_message(sockfd, (char*)&message_input, sizeof(message_input));
-
-    // receive a msg from the server
-    ssize_t byte_count = recv_message(sockfd, server_msg, sizeof(server_msg));
-    
-    if (byte_count <= 0) {
-      break;
-    }
-    printf("Server: %s\n", server_msg);
-  }
-
-  return 0;
-}*/
-
+// helper function to parse the user input to struct
 struct message_t parseToStruct(char user_input[]) {
   char *command = strtok(user_input, " ");
   struct message_t message;
