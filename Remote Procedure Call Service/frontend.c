@@ -11,12 +11,13 @@
 
 //struct message_t parseToStruct(char user_input[]);
 
-int main(void) {
+int main(int argc, char* argv[]) {
   int sockfd;
   char user_input[BUFSIZE] = { 0 };
   char server_msg[BUFSIZE] = { 0 };
 
-  if (connect_to_server("0.0.0.0", 10000, &sockfd) < 0) {
+  //if (connect_to_server("0.0.0.0", 10000, &sockfd) < 0) {
+  if (connect_to_server(argv[1], atoi(argv[2]), &sockfd) < 0) {
     fprintf(stderr, "oh no\n");
     return -1;
   }
