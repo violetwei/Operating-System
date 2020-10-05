@@ -23,6 +23,7 @@ int main(int argc, char* argv[]) {
   int running = 1;
   int pid;
   int rval;
+  bool finished;
 
   //if (create_server("0.0.0.0", 10000, &sockfd) < 0) {
   if (create_server(argv[1], atoi(argv[2]), &sockfd) < 0) {
@@ -38,12 +39,85 @@ int main(int argc, char* argv[]) {
     return -1;
   }*/
 
-  if (accept_connection(sockfd, &clientfd) < 0) {
+  /*if (accept_connection(sockfd, &clientfd) < 0) {
     fprintf(stderr, "oh no\n");
     return -1;
+  }*/
+
+  while (!finished) {
+    if (accept_connection(sockfd, &clientfd) < 0) {
+      fprintf(stderr, "oh no\n");
+      exit(0);
+    }
+    printf("New Connection Accepted!\n\n");
+    if ((pid = fork()) == 0) { // child process
+      printf("Process id %d running\n\n", getpid());
+      sleep(2);
+      while (strcmp(msg, "quit\n")) {
+        memset(msg, 0, sizeof(msg));
+        ssize_t byte_count = recv_message(clientfd, msg, BUFSIZE);
+
+        // restore input message to a struct
+        struct message_t *input_message = (struct message_t*) msg;
+        char *cmd = input_message->command;
+
+        if (strcmp(cmd, "add") == 0) {
+          int additionAns = addInts(input_message->integer1, input_message->integer2);
+          //itoa(additionAns, result, 10);
+          snprintf(result, sizeof(result), "%d\n", additionAns);
+        } else if (strcmp(cmd, "multiply") == 0) {
+          int multiplyAns = multiplyInts(input_message->integer1, input_message->integer2);
+          // itoa(multiplyAns, result, 10);
+          snprintf(result, sizeof(result), "%d\n", multiplyAns);
+        } else if (strcmp(cmd, "divide") == 0) {
+          float divisionAns = divideFloats(input_message->float1, input_message->float2);
+          if (input_message->float2 == 0) {
+            strcpy(result, "Error: Division by zero\n");
+          } else {
+            //ftoa(divisionAns, result, 6);
+            snprintf(result, sizeof(result), "%.6f\n", divisionAns);
+          }
+        } else if (strcmp(cmd, "factorial") == 0) {
+          int factAns = factorial(input_message->factNum);
+          // printf("Factorial number is %d", input_message->factNum);
+          //itoa(factAns, result, 10);
+          snprintf(result, sizeof(result), "%d\n", factAns);
+        } else if (strcmp(cmd, "quit\n") == 0) {
+            strcpy(result, "Bye!\n");
+            //close(sockfd);
+            shutdown(sockfd, SHUT_RDWR);
+            return 0;
+        } else if (strcmp(cmd, "sleep") == 0) {
+          sleepXSeconds(input_message->seconds);
+          strcpy(result, "\n");
+        } else if (strcmp(cmd, "exit\n") == 0) { // terminates the frontend only
+          
+          strcpy(result, "Goodbye frontend!\n");
+        } else {
+            snprintf(result, sizeof(result), "Error: Command \"%s\" not found\n", cmd);
+        }
+        if (byte_count <= 0) {
+          break;
+        }
+        printf("Client command: %s\n\n", msg);
+        send_message(clientfd, result, strlen(result));
+      }
+    } else { // parent process
+        close(clientfd);
+    }
+  }
+  /*if ((pid = fork()) == 0) {
+    sleep(10);
+    return 10;
   }
 
-  while (strcmp(msg, "quit\n")) {
+  while (1) {
+    sleep(1);
+    int res = waitpid(pid, &rval, WNOHANG);
+    printf("Returned valud %d\n", WEXITSTATUS(rval));*/
+  
+
+  /*while (strcmp(msg, "quit\n")) {
     memset(msg, 0, sizeof(msg));
     ssize_t byte_count = recv_message(clientfd, msg, BUFSIZE);
 
@@ -93,7 +167,7 @@ int main(int argc, char* argv[]) {
     send_message(clientfd, result, strlen(result));
     //printf("Client: %s\n", msg);
     //send_message(clientfd, greeting, strlen(greeting));
-  }
+  }*/
 
   return 0;
 }
