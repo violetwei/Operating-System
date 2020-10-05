@@ -5,11 +5,22 @@ We have provided some wrapper functions so that it's easier for you to create RP
 - To send a message from a client to a server (or vice versa), use the function send_message()
 - To receive a message, use the function recv_message().
 
-For a concrete implementation of a simple client/server, you can refer to the example_*.c files. To run the example, do the following:
-    - In a terminal, run 'make example'.
-    - Start the server by running './a1_example_server'.
-    - Start the client in another terminal by running './a1_example_client'.
-    - Type something in the client terminal and hit enter. You will see the message show up on the server's stdout.
-    - To stop the program, enter the message 'quit' in the client terminal.
-    - Run 'make clean' to remove the executables.
+For a concrete implementation of a simple client/server, you can refer to the example_*.c files. 
 
+To run the Simple RPC Service, do the following:
+    - In a terminal, run 'make rpc' to compile the program, it will generate the frontend and backend executable
+    - Start the backend by running './backend 0.0.0.0 10000' or with the format "./backend <host_ip> <host_port>"
+    - You will then see the message "Server listening on <host_ip>:<host_port>" 
+    - Start the frontend in another terminal by running './frontend 0.0.0.0 10000' or with the format "./frontend <host_ip> <host_port>
+    - Feel free to run multiple frotends by opening new terminal windows and enter the same command.
+    - You will be prompted to type the command after ">>" in the frontend terminal and hit enter. 
+    - The result/output will be shown quickly in the same frontend windows
+    - Supported commands including:
+    - "add 10 2"
+    - "multiply 4 5"
+    - "divide 99 10"
+    - "factorial 6"  -> returns the factorial of 6
+    - "sleep 5" -> sleeps for 5 seconds
+    - "exit" -> terminates the frontend only
+    - "quit" -> terminates the frontend and send a shutdown signal to the backend
+    - Run 'make clean' to remove the executables.
