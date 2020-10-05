@@ -79,6 +79,7 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(cmd, "quit\n") == 0) {
             strcpy(result, "Bye!\n");
             //close(sockfd);
+            finished = true;
             shutdown(sockfd, SHUT_RDWR);
             return 0;
         } else if (strcmp(cmd, "sleep") == 0) {
