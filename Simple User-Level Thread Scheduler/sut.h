@@ -15,17 +15,16 @@ typedef struct __threaddesc
 	ucontext_t threadcontext;
 } threaddesc;
 
+void *cexec_thread_run(void *args);
+void *iexec_thread_run(void *args);
 
 
 extern threaddesc threadarr[MAX_THREADS];
-extern int numthreads, curthread;
 extern ucontext_t parent;
 
 
 typedef void (*sut_task_f)();
 
-void *kernel_thread_1(void *arg);
-void *kernel_thread_2(void *arg);
 
 void sut_init();
 bool sut_create(sut_task_f fn);
