@@ -5,108 +5,100 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include "sut.h"
-#include "./queue/queue.h"
+#include "queue/queue.h"
 
-threaddesc threadarr[MAX_THREADS];
-int numthreads, curthread;
+//threaddesc threadarr[MAX_THREADS];
+static int numthreads;
 ucontext_t parentContext;
-threaddesc *tdescptr;
+static threaddesc *cur_tdescptr;
 
 // compute executor (cexec), responsible for creating tasks and launching them
-pthread_t cexec;
+static pthread_t cexec;
 // I/O executor (iexec)
-pthread_t iexec;
+static pthread_t iexec;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct queue task_ready_q;
 struct queue wait_q;
 
+static bool isRunning = true;
+
 int taskCreated;
 int taskCompleted;
+
+typedef struct connection {
+    char *ip;
+    int port;
+    //boolean open = false;
+} connection;
+
+
+void shutdown_routine_helper();
 
 // called by the user of the library before calling any other function
 // used to perform initialization - create kernel level threads
 void sut_init() {
+    numthreads = 0;
+
     // initialize two kernel-level threads known as executors
     task_ready_q = queue_create();
     wait_q = queue_create();
     queue_init(&task_ready_q);
     queue_init(&wait_q);
+
     taskCreated = 0;
     taskCompleted = 0;
     
-    pthread_create(&cexec, NULL, kernel_thread_1, NULL);
-    pthread_create(&iexec, NULL, kernel_thread_2, NULL);
+    // create pthread
+    pthread_create(&cexec, NULL, cexec_thread_run, 0);
+    pthread_create(&iexec, NULL, iexec_thread_run, 0);
 }
 
-void *kernel_thread_1(void *arg) {
-    // main kernel thread that work as c-exec
-    printf("Starting c-exec \n");
-    // wait unitl there is a thread created
-    while (true) {
-        pthread_mutex_lock(&mutex);
-        if (numthreads != 0) {
-            pthread_mutex_unlock(&mutex);
-            break;
-        }
-        pthread_mutex_unlock(&mutex);
-    }
-    while (true) {
-        while (true) {
-            struct queue_entry *popped;
-            // acquie the lock and get the next task
+void *cexec_thread_run(void *args) {
+    while(isRunning) {
+        while (queue_peek_front(&task_ready_q)) {
+            // acquire lock, then pop queue operation, then unlock
             pthread_mutex_lock(&mutex);
-            // if there is no task, break and check if there are live threads
-            if (!queue_peek_front(&task_ready_q)) {
-                pthread_mutex_unlock(&mutex);
-                break;
-            }
-            popped = queue_pop_head(&task_ready_q);
+            cur_tdescptr = (threaddesc *)(queue_pop_head(&task_ready_q)->data);
             pthread_mutex_unlock(&mutex);
-            //threaddesc *tdescptr;
-            tdescptr = (threaddesc *)popped->data;
-            swapcontext(&(parentContext), &(tdescptr->threadcontext));
-            usleep(100);
-            free(popped);
+            cur_tdescptr->threadcontext.uc_link = &parentContext;
+            swapcontext(&(parentContext), &(cur_tdescptr->threadcontext));
         }
-        // acquire the lock and check if there are live threads. 
-        pthread_mutex_lock(&mutex);
-        if (numthreads == 0) {
-            pthread_mutex_unlock(&mutex);
-            break;
-        }
-        pthread_mutex_unlock(&mutex);
     }
-    printf("Exiting c-exec\n");
 }
 
-void *kernel_thread_2(void *arg) {
+void *iexec_thread_run(void *arg) {
     
-    pthread_mutex_lock(&mutex);
+    /*pthread_mutex_lock(&mutex);
     printf("2 Hello from\n");
     usleep(1000);
     printf("2 thread2\n");
-    pthread_mutex_lock(&mutex);
+    pthread_mutex_lock(&mutex);*/
        
+}
+
+void shutdown_routine_helper() {
+    isRunning = false;
 }
 
 // called by the user of library in order to add a new task which should be scheduled to run on C-Exec thread
 // parameter fn is a function the user would like to run in the task
 bool sut_create(sut_task_f fn) {
-    //threaddesc *tdescptr;
+    threaddesc *tdescptr = (threaddesc *)malloc(sizeof(threaddesc));
 
 	if (numthreads >= MAX_THREADS) {
 		printf("FATAL: Maximum thread limit reached... creation failed! \n");
-		return -1;
+		return false;
 	}
-    curthread = numthreads;
 
-	tdescptr = &(threadarr[numthreads]);
+	//tdescptr = &(threadarr[numthreads]);
 	getcontext(&(tdescptr->threadcontext));
 	tdescptr->threadid = numthreads;
-    printf("created thread with id %d\n", tdescptr->threadid);
+    //printf("created thread with id %d\n", tdescptr->threadid);
 	tdescptr->threadstack = (char *)malloc(THREAD_STACK_SIZE);
 	tdescptr->threadcontext.uc_stack.ss_sp = tdescptr->threadstack;
 	tdescptr->threadcontext.uc_stack.ss_size = THREAD_STACK_SIZE;
@@ -114,20 +106,14 @@ bool sut_create(sut_task_f fn) {
 	tdescptr->threadcontext.uc_stack.ss_flags = 0;
 	tdescptr->threadfunc = fn;
 
-	makecontext(&(tdescptr->threadcontext), *fn, 0);
+	makecontext(&(tdescptr->threadcontext), fn, 0);
 	numthreads++;
 
     // a newly created task is added to the end of task ready queue
-    struct queue_entry *node;
-
-    // lock the queue, push, then unlock
-    pthread_mutex_lock(&mutex);
-    node = queue_new_node(tdescptr);
+    struct queue_entry *node= queue_new_node(tdescptr);
+  
     queue_insert_tail(&task_ready_q, node);
-    pthread_mutex_unlock(&mutex);
-
-    swapcontext(&(parentContext), &(tdescptr->threadcontext));
-
+    
 	return true;
 }
 
@@ -138,29 +124,15 @@ void sut_yield() {
     taskCreated++;
     printf("Task created: %d\n", taskCreated);
    
-    struct queue_entry *node = queue_new_node(tdescptr);
-
-    //lock the queue, then push/pop, then unlock
-    pthread_mutex_lock(&mutex);
+    struct queue_entry *node = queue_new_node(cur_tdescptr);
 
     // a task that is yielding is put back in the end of task ready queue
     queue_insert_tail(&task_ready_q, node);
-    
-    if (queue_peek_front(&task_ready_q)) {
-        return;
-    }
 
-    struct queue_entry *nextNode = queue_peek_front(&task_ready_q);
-    pthread_mutex_unlock(&mutex);
-
-    //struct __threaddesc *tdescptr = (threaddesc *)malloc(sizeof(struct __threaddesc));
-
-    tdescptr = (threaddesc *)nextNode->data;
+    swapcontext(&(cur_tdescptr->threadcontext), (cur_tdescptr->threadcontext).uc_link);
         
-    swapcontext(&(parentContext), &(tdescptr->threadcontext));
-        
-    taskCompleted++;
-    printf("Task completed: %d\n", taskCompleted);
+    //taskCompleted++;
+    //printf("Task completed: %d\n", taskCompleted);
 
 }
 
@@ -168,7 +140,12 @@ void sut_yield() {
 // when called, the state/context of the curently running task should be destroyed - should not resume this task again later
 // the C-Exec thread should be instructed to schedule the next task in its queueof ready tasks
 void sut_exit() {
-//&& taskCreated != taskCompleted
+    numthreads--;
+    ucontext_t cur_context = cur_tdescptr->threadcontext;
+    ucontext_t next_context = *((cur_tdescptr->threadcontext).uc_link);
+    free(cur_tdescptr->threadstack);
+    free(cur_tdescptr);
+    swapcontext(&cur_context, &next_context);
 }
 
 // called within a user task
@@ -208,6 +185,7 @@ char *sut_read() {
 }
 
 void sut_shutdown() {
-    pthread_join(cexec, NULL);
+    sut_create(shutdown_routine_helper);
     pthread_join(iexec, NULL);
+    pthread_join(cexec, NULL);
 }
