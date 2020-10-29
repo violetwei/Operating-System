@@ -37,6 +37,11 @@ static bool iexecRunning = true;
 int taskCreated;
 int taskCompleted;
 
+ssize_t byte_read;
+ssize_t byte_sent;
+
+int clientfd;
+
 #define BUFSIZE  1024
 
 typedef struct connection {
@@ -149,6 +154,8 @@ void *iexec_thread_run(void *arg) {
                 queue_insert_tail(&task_ready_q, node);
                 pthread_mutex_unlock(&mutex);
 
+                //usleep(100);
+
                 break;
             }
         }
@@ -156,10 +163,18 @@ void *iexec_thread_run(void *arg) {
         while (iexecRunning && tcp_connect->open) {
             if (tcp_connect->can_read) {
                 //printf("Reached read in iexec!\n");
-                if (recv(tcp_connect->sockfd, tcp_connect->read_buffer, strlen(tcp_connect->read_buffer), 0) > 0) {
+                
+                byte_read = recv(tcp_connect->sockfd, tcp_connect->read_buffer, BUFSIZE, 0);
+                printf("Byte read %d\n", byte_read);
+                if (byte_read <= 0) {
+                    fprintf(stderr, "%s\n", strerror(errno));
+                }
+                tcp_connect->can_read = false;
+
                 //if (read(tcp_connect->sockfd, tcp_connect->read_buffer, BUFSIZE) > 0) {
                     printf("Read buffer: %s\n", tcp_connect->read_buffer);
-                    tcp_connect->can_read = false;
+                    
+                    
                     // when the response arrives, the task is moved from wait queue to task ready queue
                     pthread_mutex_lock(&io_lock);
                     // resume the task
@@ -171,7 +186,7 @@ void *iexec_thread_run(void *arg) {
                     queue_insert_tail(&task_ready_q, node);
                     pthread_mutex_unlock(&mutex);
 
-                } else {
+                /*} else {
                     perror("ERROR reading the socket");
                     printf("Read buffer: %s\n", tcp_connect->read_buffer);
                     tcp_connect->can_read = false;
@@ -186,7 +201,7 @@ void *iexec_thread_run(void *arg) {
                     queue_insert_tail(&task_ready_q, node);
                     pthread_mutex_unlock(&mutex);
 
-                }
+                }*/
             }
         }
         // wait to close the socket associated with current task
@@ -195,6 +210,7 @@ void *iexec_thread_run(void *arg) {
                 pthread_mutex_lock(&io_lock);
                 close(tcp_connect->sockfd);
                 pthread_mutex_unlock(&io_lock);
+                printf("Socket Closed!!!\n");
                 break;
             }
         }
@@ -334,8 +350,10 @@ char *sut_read() {
     if (tcp_connect->open != true) {
         printf("Error! The task has not successfully called sut_open()!\n");
     }
+    
     // signal the iexec thread to read from task's associated socket
     tcp_connect->can_read = true;
+    
     printf("Signal iexec to read!\n");
 
     struct queue_entry *node = queue_new_node(cur_tdescptr);
