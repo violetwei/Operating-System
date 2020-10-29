@@ -37,6 +37,8 @@ static bool iexecRunning = true;
 int taskCreated;
 int taskCompleted;
 
+int total_byte_read;
+
 ssize_t byte_read;
 ssize_t byte_sent;
 
@@ -50,7 +52,10 @@ typedef struct connection {
     int sockfd;
     // read context
     char read_buffer[BUFSIZE];
+    char write_buffer[BUFSIZE];
+    int write_size;
     bool can_read;
+    bool can_write;
     bool open;
 } connection;
 
@@ -65,6 +70,7 @@ void shutdown_iexec_routine();
 // used to perform initialization - create kernel level threads
 void sut_init() {
     numthreads = 0;
+    total_byte_read = 0;
 
     // initialize two kernel-level threads known as executors
     task_ready_q = queue_create();
@@ -84,6 +90,7 @@ void sut_init() {
     // initialize the open connection state to false
     tcp_connect->open = false;
     tcp_connect->can_read = false;
+    tcp_connect->can_write = false;
     
     // create pthread
     pthread_create(&cexec, NULL, cexec_thread_run, 0);
@@ -163,12 +170,23 @@ void *iexec_thread_run(void *arg) {
         while (iexecRunning && tcp_connect->open) {
             if (tcp_connect->can_read) {
                 //printf("Reached read in iexec!\n");
+                /*if (byte_read < BUFSIZE) {
+                    int count = recv(tcp_connect->sockfd, &(tcp_connect->read_buffer)[byte_read], BUFSIZE-byte_read, 0);
+                    if (byte_read <= 0) {
+                        fprintf(stderr, "%s\n", strerror(errno));
+                    }
+                    byte_read += count;
+                    printf("Byte read %d\n", byte_read);
+                }*/
                 
                 byte_read = recv(tcp_connect->sockfd, tcp_connect->read_buffer, BUFSIZE, 0);
+                total_byte_read += byte_read;
                 printf("Byte read %d\n", byte_read);
+                printf("Total Byte read %d\n", total_byte_read);
                 if (byte_read <= 0) {
-                    fprintf(stderr, "%s\n", strerror(errno));
+                    fprintf(stderr, "recv failed %s\n", strerror(errno));
                 }
+
                 tcp_connect->can_read = false;
 
                 //if (read(tcp_connect->sockfd, tcp_connect->read_buffer, BUFSIZE) > 0) {
@@ -179,6 +197,7 @@ void *iexec_thread_run(void *arg) {
                     pthread_mutex_lock(&io_lock);
                     // resume the task
                     struct queue_entry *node= queue_new_node((threaddesc *)(queue_pop_head(&wait_q)->data));
+                   
                     pthread_mutex_unlock(&io_lock);
 
                     pthread_mutex_lock(&mutex);
@@ -203,14 +222,21 @@ void *iexec_thread_run(void *arg) {
 
                 }*/
             }
+
+            if (tcp_connect->can_write) {
+                send(tcp_connect->sockfd, tcp_connect->write_buffer, tcp_connect->write_size, 0);
+                printf("IEXEC has sent %s to the socket!!\n", tcp_connect->write_buffer);
+                tcp_connect->can_write = false;
+            }
         }
         // wait to close the socket associated with current task
         while (iexecRunning) {
             if (tcp_connect->open == false) {
+                
                 pthread_mutex_lock(&io_lock);
-                close(tcp_connect->sockfd);
+                int n = close(tcp_connect->sockfd);
                 pthread_mutex_unlock(&io_lock);
-                printf("Socket Closed!!!\n");
+                printf("Socket Closed!!! %d\n", n);
                 break;
             }
         }
@@ -323,7 +349,15 @@ void sut_open(char *dest, int port) {
 // after I-Exec thread is signaled to perform the write, the callling task should continue on the C-Exec thread and not be interrrupted
 // the write should be performed by the I-Exec thread concurrently with the still-running calling task on C-Exec thread
 void sut_write(char *buf, int size) {
-
+    if (tcp_connect->open != true) {
+        printf("Error! The task has not successfully called sut_open()!\n");
+        exit(1);
+    }
+    strcpy(tcp_connect->write_buffer, buf);
+    tcp_connect->write_size = size;
+    // signal iexec to write to the socket assiciated with current task
+    tcp_connect->can_write = true;
+    //send(tcp_connect->sockfd, buf, size, 0);
 }
 
 // called within a user task
@@ -334,11 +368,10 @@ void sut_close() {
     // terminate the connection we've established with the remote process
     if (tcp_connect->open != true) {
         printf("Error! The task has not successfully called sut_open()!\n");
-        return;
+        exit(1);
     }
     tcp_connect->open = false;
-    // close the socket associated with current task
-    
+    // close the socket associated with current task in iexec
 }
 
 // called within a user task
@@ -349,6 +382,7 @@ void sut_close() {
 char *sut_read() {
     if (tcp_connect->open != true) {
         printf("Error! The task has not successfully called sut_open()!\n");
+        exit(1);
     }
     
     // signal the iexec thread to read from task's associated socket
