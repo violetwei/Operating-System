@@ -12,9 +12,8 @@
 
 #include "sut.h"
 #include "queue.h"
-#include "a1_lib.h"
 
-//threaddesc threadarr[MAX_THREADS];
+
 static int numthreads;
 ucontext_t parentContext;
 static threaddesc *cur_tdescptr;
@@ -23,6 +22,7 @@ static threaddesc *cur_tdescptr;
 static pthread_t cexec;
 // I/O executor (iexec)
 static pthread_t iexec;
+
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t io_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -41,8 +41,6 @@ int total_byte_read;
 
 ssize_t byte_read;
 ssize_t byte_sent;
-
-int clientfd;
 
 #define BUFSIZE  1024
 
@@ -64,7 +62,6 @@ struct connection *tcp_connect;
 
 void shutdown_cexec_routine();
 void shutdown_iexec_routine();
-//int connect_to_server(const char *host, uint16_t port, int *sockfd);
 
 // called by the user of the library before calling any other function
 // used to perform initialization - create kernel level threads
@@ -97,6 +94,7 @@ void sut_init() {
     pthread_create(&iexec, NULL, iexec_thread_run, 0);
 }
 
+
 void *cexec_thread_run(void *args) {
     printf("Starting C-Exec\n");
     while(cexecRunning) {
@@ -105,8 +103,10 @@ void *cexec_thread_run(void *args) {
             pthread_mutex_lock(&mutex);
             cur_tdescptr = (threaddesc *)(queue_pop_head(&task_ready_q)->data);
             pthread_mutex_unlock(&mutex);
+
             cur_tdescptr->threadcontext.uc_link = &parentContext;
             swapcontext(&(parentContext), &(cur_tdescptr->threadcontext));
+
             // issue a usleep for 100 microseconds
             // after the sleep, cexec will check the ready queue again
             usleep(100);
@@ -114,11 +114,10 @@ void *cexec_thread_run(void *args) {
     }
     printf("Exiting C-Exec\n");
 
-    //pthread_mutex_lock(&io_lock);
     // signal to iexec 
     shutdown_iexec_routine();
-    //pthread_mutex_unlock(&io_lock);
 }
+
 
 void *iexec_thread_run(void *arg) {
     printf("Starting I-Exec\n");
@@ -126,15 +125,10 @@ void *iexec_thread_run(void *arg) {
         // wait for tcp socket connection signaled by sut_open
         while (iexecRunning) {
             if (tcp_connect->open) {
-                // create TCP socket & connect to server
-                /*if (connect_to_server(tcp_connect->ip, tcp_connect->port, tcp_connect->sockfd) < 0) {
-                    fprintf(stderr, "oh no\n");
-                } else {
-                    printf("Connected to server!\n");
-                }*/
+               
                 struct sockaddr_in server_address = { 0 };
 
-  
+                // create TCP socket & connect to server
                 tcp_connect->sockfd = socket(AF_INET, SOCK_STREAM, 0);
                 if (tcp_connect->sockfd < 0) {
                     perror("Error opening socket");
@@ -157,22 +151,21 @@ void *iexec_thread_run(void *arg) {
                 pthread_mutex_unlock(&io_lock);
 
                 pthread_mutex_lock(&mutex);
-                //transfer the task back to ready queue
+                //transfer the task back to ready queue, rescheduled
                 queue_insert_tail(&task_ready_q, node);
                 pthread_mutex_unlock(&mutex);
-
-                //usleep(100);
 
                 break;
             }
         }
         // wait to read from the task's associated socket
         while (iexecRunning && tcp_connect->open) {
+            // iexec is signaled to read
             if (tcp_connect->can_read) {
                 //printf("Reached read in iexec!\n");
                 /*if (byte_read < BUFSIZE) {
                     int count = recv(tcp_connect->sockfd, &(tcp_connect->read_buffer)[byte_read], BUFSIZE-byte_read, 0);
-                    if (byte_read <= 0) {
+                    if (count <= 0) {
                         fprintf(stderr, "%s\n", strerror(errno));
                     }
                     byte_read += count;
@@ -181,59 +174,44 @@ void *iexec_thread_run(void *arg) {
                 
                 byte_read = recv(tcp_connect->sockfd, tcp_connect->read_buffer, BUFSIZE, 0);
                 total_byte_read += byte_read;
-                printf("Byte read %d\n", byte_read);
-                printf("Total Byte read %d\n", total_byte_read);
+                //printf("Byte read %d\n", byte_read);
+                //printf("Total Byte read %d\n", total_byte_read);
                 if (byte_read <= 0) {
-                    fprintf(stderr, "recv failed %s\n", strerror(errno));
+                    //fprintf(stderr, "recv failed %s\n", strerror(errno));
+                    perror("recv failed: ");
                 }
 
+                // set the read flag back to false
                 tcp_connect->can_read = false;
 
-                //if (read(tcp_connect->sockfd, tcp_connect->read_buffer, BUFSIZE) > 0) {
-                    printf("Read buffer: %s\n", tcp_connect->read_buffer);
+                //printf("Read buffer: %s\n", tcp_connect->read_buffer);
                     
-                    
-                    // when the response arrives, the task is moved from wait queue to task ready queue
-                    pthread_mutex_lock(&io_lock);
-                    // resume the task
-                    struct queue_entry *node= queue_new_node((threaddesc *)(queue_pop_head(&wait_q)->data));
-                   
-                    pthread_mutex_unlock(&io_lock);
+                // when the response arrives, the task is moved from wait queue to task ready queue
+                pthread_mutex_lock(&io_lock);
+                // resume the task
+                struct queue_entry *node= queue_new_node((threaddesc *)(queue_pop_head(&wait_q)->data)); 
+                pthread_mutex_unlock(&io_lock);
 
-                    pthread_mutex_lock(&mutex);
-                    //transfer the task back to ready queue
-                    queue_insert_tail(&task_ready_q, node);
-                    pthread_mutex_unlock(&mutex);
-
-                /*} else {
-                    perror("ERROR reading the socket");
-                    printf("Read buffer: %s\n", tcp_connect->read_buffer);
-                    tcp_connect->can_read = false;
-                    // when the response arrives, the task is moved from wait queue to task ready queue
-                    pthread_mutex_lock(&io_lock);
-                    // resume the task
-                    struct queue_entry *node= queue_new_node((threaddesc *)(queue_pop_head(&wait_q)->data));
-                    pthread_mutex_unlock(&io_lock);
-
-                    pthread_mutex_lock(&mutex);
-                    //transfer the task back to ready queue
-                    queue_insert_tail(&task_ready_q, node);
-                    pthread_mutex_unlock(&mutex);
-
-                }*/
+                pthread_mutex_lock(&mutex);
+                //transfer the task back to ready queue, rescheduled
+                queue_insert_tail(&task_ready_q, node);
+                pthread_mutex_unlock(&mutex);
             }
 
+            // iexec is signaled to write
             if (tcp_connect->can_write) {
                 send(tcp_connect->sockfd, tcp_connect->write_buffer, tcp_connect->write_size, 0);
                 printf("IEXEC has sent %s to the socket!!\n", tcp_connect->write_buffer);
+                // set the write flag back to false
                 tcp_connect->can_write = false;
             }
         }
+
         // wait to close the socket associated with current task
         while (iexecRunning) {
             if (tcp_connect->open == false) {
-                
                 pthread_mutex_lock(&io_lock);
+                // close the socket
                 int n = close(tcp_connect->sockfd);
                 pthread_mutex_unlock(&io_lock);
                 printf("Socket Closed!!! %d\n", n);
@@ -241,8 +219,7 @@ void *iexec_thread_run(void *arg) {
             }
         }
     }
-    //pthread_mutex_lock(&mutex);
-    //pthread_mutex_lock(&mutex);
+    
     printf("Exiting I-Exec\n");   
 }
 
@@ -255,6 +232,8 @@ void shutdown_cexec_routine() {
     cexecRunning = false;
 }
 
+
+
 // called by the user of library in order to add a new task which should be scheduled to run on C-Exec thread
 // parameter fn is a function the user would like to run in the task
 bool sut_create(sut_task_f fn) {
@@ -265,7 +244,6 @@ bool sut_create(sut_task_f fn) {
 		return false;
 	}
 
-	//tdescptr = &(threadarr[numthreads]);
 	getcontext(&(tdescptr->threadcontext));
 	tdescptr->threadid = numthreads;
     //printf("created thread with id %d\n", tdescptr->threadid);
@@ -287,6 +265,7 @@ bool sut_create(sut_task_f fn) {
 	return true;
 }
 
+
 // called within a user task -> a task calls for pasusing its execution
 // when called, the state/context of currently running task should be saved and rescheduled to be resumed later
 // the C-Exec thread should be instructed to schedule the next task in its queue of ready task
@@ -299,12 +278,14 @@ void sut_yield() {
     // a task that is yielding is put back in the end of task ready queue
     queue_insert_tail(&task_ready_q, node);
 
+    // cexec schedules next available task
     swapcontext(&(cur_tdescptr->threadcontext), (cur_tdescptr->threadcontext).uc_link);
         
     //taskCompleted++;
     //printf("Task completed: %d\n", taskCompleted);
 
 }
+
 
 // called within a user task
 // when called, the state/context of the curently running task should be destroyed - should not resume this task again later
@@ -315,8 +296,10 @@ void sut_exit() {
     ucontext_t next_context = *((cur_tdescptr->threadcontext).uc_link);
     free(cur_tdescptr->threadstack);
     free(cur_tdescptr);
+    // instruct cexec to schedule next task in ready queue
     swapcontext(&cur_context, &next_context);
 }
+
 
 // called within a user task
 // when called, the I-Exec thread should be instructed to open a TCP socket connection to the address specified by dest on port
@@ -330,18 +313,18 @@ void sut_open(char *dest, int port) {
     tcp_connect->port = port;
     tcp_connect->open = true;
  
-    printf("signal iexec to open connextion!\n");
+    printf("signal iexec to open connection!\n");
     // the currently running task that called sut_open should not be resumed until iexec completes the operation
     struct queue_entry *node = queue_new_node(cur_tdescptr);
-    // a task that is yielding is put back in the end of task ready queue
+    // the task stays in wait queue until exec completes the operation
     queue_insert_tail(&wait_q, node);
 
-    // cexec thread should be instructed to schedule the next task in ready queue
+    // instruct cexec thread to schedule the next task in ready queue
     swapcontext(&(cur_tdescptr->threadcontext), (cur_tdescptr->threadcontext).uc_link);
 
-    printf("sut_open finished!\n");
-
+    // printf("sut_open finished!\n");
 }
+
 
 // called within a user task
 // when called, the I-Exec thread should be instructed to write size bytes from buf to the socket assoiciated with the current task
@@ -353,12 +336,14 @@ void sut_write(char *buf, int size) {
         printf("Error! The task has not successfully called sut_open()!\n");
         exit(1);
     }
+    // save the buf and size in the tcp_connect struct
     strcpy(tcp_connect->write_buffer, buf);
     tcp_connect->write_size = size;
+
     // signal iexec to write to the socket assiciated with current task
     tcp_connect->can_write = true;
-    //send(tcp_connect->sockfd, buf, size, 0);
 }
+
 
 // called within a user task
 // when called, the I-Exec thread should close the socket associated with the current task
@@ -370,9 +355,10 @@ void sut_close() {
         printf("Error! The task has not successfully called sut_open()!\n");
         exit(1);
     }
+    // signal iexec to close the socket associated with current task in iexec
     tcp_connect->open = false;
-    // close the socket associated with current task in iexec
 }
+
 
 // called within a user task
 // when called, the I-Exec thread should be instructed to read from task's associated socket until there is no more data to read
@@ -391,12 +377,13 @@ char *sut_read() {
     printf("Signal iexec to read!\n");
 
     struct queue_entry *node = queue_new_node(cur_tdescptr);
-    // put the task in the back of wait queue
+    // put the task in the back of wait queue, it stays there until iexec completes read
     queue_insert_tail(&wait_q, node);
 
-    // cexec thread should be instructed to schedule the next task in ready queue
+    // instruct cexec thread to schedule the next task in ready queue
     swapcontext(&(cur_tdescptr->threadcontext), (cur_tdescptr->threadcontext).uc_link);
 
+    // can_read is set to false after iexec finishes read operation
     while (tcp_connect->can_read) {
         // wait for the recv() to fill the read_buffer;
     }
@@ -404,10 +391,11 @@ char *sut_read() {
     return tcp_connect->read_buffer;
 }
 
+
 // called by the user when they are done adding tasks and would like to wait for currently running tasks to finish
 void sut_shutdown() {
     sut_create(shutdown_cexec_routine);
-    //shutdown_iexec_routine();
+
     pthread_join(iexec, NULL);
     pthread_join(cexec, NULL);
 }
