@@ -5,14 +5,22 @@
 void hello1() {
     int i;
     char *str;
+    //sut_close();
+    sut_open("0.0.0.0", 3001); 
+    printf("Connection opened\n");
     for (i = 0; i < 10; i++) {
+       
 	str = sut_read();
+    
 	if (strlen(str) != 0)
 	    printf("I am SUT-One, message from server: %s\n", str);
 	else
 	    printf("ERROR!, empty message received \n");
 	sut_yield();
     }
+    sut_close();
+    printf("Reached Close\n");
+
     sut_exit();
 }
 
