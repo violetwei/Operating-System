@@ -25,12 +25,14 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdlib.h>
 
 /* Definitions*/
 #define MAX_TOP_FREE (128 * 1024) // Max top free block size = 128 Kbytes
 //	TODO: Change the Header size if required
 #define FREE_BLOCK_HEADER_SIZE 2 * sizeof(char *) + sizeof(int) // Size of the Header in a free memory block
 //	TODO: Add constants here
+char str[60];
 
 typedef enum //	Policy type definition
 {
@@ -48,6 +50,8 @@ Policy currentPolicy = WORST;		  //	Current Policy
 static sma_header_t *sma_free_list = NULL;
 static void *sma_last_brk = NULL;
 static bool sma_initialized = false;
+static sma_header_t *search_start = NULL;
+static sma_header_t *heap_start = NULL;
 
 /*
  * =====================================================================================
@@ -149,7 +153,7 @@ void sma_free(void *ptr)
 		sma_set_used(prev, sma_next(header), 0);
 
 		//	Adds the block to the free memory list
-		add_block_freeList(ptr);
+		add_block_freeList(ptr); //header
 
 		sma_coalesce(header);
 	}
@@ -236,7 +240,7 @@ void *sma_realloc(void *ptr, int size)
     if (aligned_size <= orig_size) {
         sma_split_block(header, aligned_size);
         return ptr;
-    }
+	}
 
     /* Try coalescing with the next block */
     if (sma_coalesce_next(header)) {
@@ -349,18 +353,34 @@ static sma_header_t * sma_sbrk_new_block(size_t aligned_size) {
     /* Add new block to free list */
     add_block_freeList(header);
 
+	totalFreeSize += aligned_size;
+
     /* Coalesce with the previous block if it's free */
     return sma_coalesce_prev(header);
 }
 
 static sma_header_t * sma_find_free_block(size_t aligned_size) {
-    sma_header_t *header = sma_free_list;
-    while (header != NULL) {
-        if (sma_size(curr, header) >= aligned_size) {
-            return header;
-        }
-        header = header->next_free;
-    }
+	if (currentPolicy == WORST) {
+		sma_header_t *header = sma_free_list;
+		while (header != NULL) {
+			if (sma_size(curr, header) >= aligned_size) {
+				return header;
+			}
+			header = header->next_free;
+		}
+	} else { // Next-fit
+		if (!search_start) {
+			search_start = sma_free_list;
+		}
+		sma_header_t *header = search_start;
+		while (header != NULL) {
+			if (sma_size(curr, header) >= aligned_size) {
+				search_start = header;
+				return header;
+			}
+			header = header->next_free;
+		}
+	}
     return NULL;
 }
 
@@ -447,9 +467,13 @@ void *allocate_next_fit(int size)
 	//			allocate free blocks that come after that address (i.e. on top of it). Once you reach 
 	//			Program Break, you start from the beginning of your heap, as in with the free block with
 	//			the smallest address)
-	sma_header_t *header = sma_free_list;
+	if (!search_start) {
+		search_start = sma_free_list;
+	}
+	sma_header_t *header = search_start;
     while (header != NULL) {
         if (sma_size(curr, header) >= size) {
+			search_start = header;
             return header;
         }
         header = header->next_free;
