@@ -92,15 +92,3 @@ static bool sma_sbrk(size_t delta, void **orig_brk, void **new_brk);
 static sma_header_t * sma_split_block(sma_header_t *header, size_t aligned_size);
 static sma_header_t * sma_find_free_block(size_t aligned_size);
 static sma_header_t * sma_sbrk_new_block(size_t aligned_size);
-
-
-static sma_header_t * mya_split_block(sma_header_t *header, size_t aligned_size);
-static sma_header_t * mya_sbrk_new_block(size_t aligned_size);
-static sma_header_t * mya_find_free_block(size_t aligned_size);
-static bool mya_initialize(void);
-static bool mya_sbrk(size_t delta, void **orig_brk, void **new_brk);
-static sma_header_t * mya_coalesce(sma_header_t *header);
-static sma_header_t * mya_coalesce_prev(sma_header_t *header);
-static bool mya_coalesce_next(sma_header_t *header);
-static void mya_remove_free_list(sma_header_t *header);
-static void mya_add_free_list(sma_header_t *header);
