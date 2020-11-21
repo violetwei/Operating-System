@@ -1,0 +1,84 @@
+violet@violet-VirtualBox:~/Desktop/A3_Starter_Code$ gcc a3_test1.c sma.c && ./a.out
+Test 1: Excess Memory Allocation...
+c[0]: 0x56104dee7010
+c[1]: 0x56104dee7420
+c[2]: 0x56104dee7830
+c[3]: 0x56104dee7c40
+c[4]: 0x56104dee8050
+c[5]: 0x56104dee8460
+c[6]: 0x56104dee8870
+c[7]: 0x56104dee8c80
+c[8]: 0x56104dee9090
+c[9]: 0x56104dee94a0
+c[10]: 0x56104dee98b0
+c[11]: 0x56104dee9cc0
+c[12]: 0x56104deea0d0
+c[13]: 0x56104deea4e0
+c[14]: 0x56104deea8f0
+c[15]: 0x56104deead00
+c[16]: 0x56104deeb110
+c[17]: 0x56104deeb520
+c[18]: 0x56104deeb930
+c[19]: 0x56104deebd40
+c[20]: 0x56104deec150
+c[21]: 0x56104deec560
+c[22]: 0x56104deec970
+c[23]: 0x56104deecd80
+c[24]: 0x56104deed190
+c[25]: 0x56104deed5a0
+c[26]: 0x56104deed9b0
+c[27]: 0x56104deeddc0
+c[28]: 0x56104deee1d0
+c[29]: 0x56104deee5e0
+c[30]: 0x56104deee9f0
+c[31]: 0x56104deeee00
+Freeing c[10]: 0x56104dee98b0
+Freeing c[11]: 0x56104dee9cc0
+Freeing c[12]: 0x56104deea0d0
+Freeing c[13]: 0x56104deea4e0
+Freeing c[14]: 0x56104deea8f0
+Freeing c[15]: 0x56104deead00
+Freeing c[16]: 0x56104deeb110
+Freeing c[17]: 0x56104deeb520
+CT : 0x56104deef210
+C[31]: 0x56104deeee00
+				 PASSED
+
+Test 6: Print SMA Statistics...
+===============================
+Total number of bytes allocated: 37888
+Total free space: 13312
+Size of largest contigious free space (in bytes): 6608
+
+
+violet@violet-VirtualBox:~/Desktop/A3_Starter_Code$ gcc a3_test2.c sma.c && ./a.out
+Test 2: Program break expansion test...
+Count: 39
+				 PASSED
+
+Test 6: Print SMA Statistics...
+===============================
+Total number of bytes allocated: 25559040
+Total free space: 25559040
+Size of largest contigious free space (in bytes): 163184
+
+
+violet@violet-VirtualBox:~/Desktop/A3_Starter_Code$ gcc a3_test3.c sma.c && ./a.out
+Test 3: Check for Worst Fit algorithm...
+CP2: 0x5594aeb6b1c0
+C2[27]: 0x5594aeb6b1c0
+C2[28]: 0x5594aeb6f1d0
+C2[29]: 0x5594aeb731e0
+C2[30]: 0x5594aeb771f0
+				 PASSED
+
+violet@violet-VirtualBox:~/Desktop/A3_Starter_Code$ gcc a3_test4.c sma.c && ./a.out
+Test 4: Check for Next Fit algorithm...
+C2[19]: 0x55b6867c5010
+CP4: 0x55b6867c5010
+				 PASSED
+
+violet@violet-VirtualBox:~/Desktop/A3_Starter_Code$ gcc a3_test5.c sma.c && ./a.out
+Test 5: Check for Reallocation with Next Fit...
+CP4: 310
+				 PASSED
