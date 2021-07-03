@@ -1,24 +1,3 @@
-/*
- * =====================================================================================
- *
- *	Filename:  		sma.c
- *
- *  Description:	Base code for Assignment 3 for ECSE-427 / COMP-310
- *
- *  Version:  		1.0
- *  Created:  		6/11/2020 9:30:00 AM
- *  Revised:  		-
- *  Compiler:  		gcc
- *
- *  Author:  		Mohammad Mushfiqur Rahman
- *      
- *  Instructions:   Please address all the "TODO"s in the code below and modify 
- * 					them accordingly. Feel free to modify the "PRIVATE" functions.
- * 					Don't modify the "PUBLIC" functions (except the TODO part), unless
- * 					you find a bug! Refer to the Assignment Handout for further info.
- * =====================================================================================
- */
-
 /* Includes */
 #include "sma.h" // Please add any libraries you plan to use inside this file
 #include <stdbool.h>
